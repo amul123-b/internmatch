@@ -3,10 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
-import {
-  MapPin,
-  DollarSign,
-} from "lucide-react";
+import { MapPin, DollarSign } from "lucide-react";
 
 type Internship = {
   _id: string;
@@ -28,141 +25,69 @@ export default function ApplyPage({
   const resolvedParams = use(params);
 
   const [job, setJob] = useState<Internship | null>(null);
-  const [aiData, setAiData] = useState<{
-    resume: string;
-    coverLetter: string;
-  } | null>(null);
-
+  const [aiData, setAiData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [applied, setApplied] = useState(false);
-  const [error, setError] = useState("");
 
-  // ✅ LOAD JOB
+  // 📦 LOAD JOB
   useEffect(() => {
-    const storedJob = localStorage.getItem("selectedJob");
-    if (storedJob) {
-      setJob(JSON.parse(storedJob));
-    } else {
-      router.push("/internships");
-    }
-  }, [router]);
+    const stored = localStorage.getItem("selectedJob");
+    if (stored) setJob(JSON.parse(stored));
+    else router.push("/internships");
+  }, []);
 
   // 🚀 AI GENERATE
-  const handleApplyWithAI = async () => {
+  const handleGenerate = async () => {
     if (!job) return;
-
     setLoading(true);
 
-    try {
-      const res = await fetch("/api/ai/generate-application", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobTitle: job.title,
-          company: job.company,
-          requiredSkills: job.skillsRequired || [],
-          description: job.description || "",
-        }),
-      });
+    const res = await fetch("/api/ai/generate-application", {
+      method: "POST",
+      body: JSON.stringify({
+        jobTitle: job.title,
+        company: job.company,
+        description: job.description,
+      }),
+    });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError("AI generation failed");
-        return;
-      }
-
-      setAiData(data);
-    } catch (err) {
-      console.error(err);
-      setError("Server error");
-    } finally {
-      setLoading(false);
-    }
+    const data = await res.json();
+    setAiData(data);
+    setLoading(false);
   };
 
-  // 📄 DOWNLOAD PDF
-  const handleDownloadPDF = async () => {
-    try {
-      const res = await fetch("/api/user/resume-pdf");
-
-      if (!res.ok) {
-        const err = await res.json();
-        setError(err.message || "PDF failed");
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "Resume.pdf";
-      a.click();
-
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error(err);
-      setError("PDF error");
-    }
-  };
-
-  // ✅ FINAL SUBMIT (🔥 SAVES TO DB)
-  const handleFinalSubmit = async () => {
+  // ✅ SUBMIT
+  const handleSubmit = async () => {
     if (!job) return;
 
-    try {
-      await fetch("/api/applications", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobTitle: job.title,
-          company: job.company,
-        }),
-      });
+    await fetch("/api/applications", {
+      method: "POST",
+      body: JSON.stringify({
+        jobTitle: job.title,
+        company: job.company,
+      }),
+    });
 
-      setApplied(true);
+    setApplied(true);
 
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 2000);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to submit application");
-    }
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 1500);
   };
 
-  if (!job) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-white">
-        Loading...
-      </div>
-    );
-  }
+  if (!job) return null;
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-gradient-to-br from-black via-[#140021] to-[#2d0036] text-white">
       <Navbar />
 
-      <main className="max-w-4xl mx-auto px-6 py-20">
+      <main className="max-w-7xl mx-auto px-6 py-24 grid md:grid-cols-2 gap-10">
 
-        {/* ERROR */}
-        {error && (
-          <div className="bg-red-500 p-3 rounded mb-4">
-            {error}
-          </div>
-        )}
+        {/* LEFT SIDE — JOB DETAILS */}
+        <div className="bg-white/5 p-6 rounded-2xl border border-white/10">
+          <h1 className="text-3xl font-bold mb-2">{job.title}</h1>
+          <p className="text-gray-300">{job.company}</p>
 
-        {/* JOB INFO */}
-        <div className="bg-white/5 p-6 rounded mb-6">
-          <h1 className="text-2xl font-bold">{job.title}</h1>
-          <p>{job.company}</p>
-
-          <p className="text-sm mt-2 flex gap-3">
+          <div className="flex gap-4 text-sm text-gray-400 mt-3">
             <span className="flex gap-1">
               <MapPin size={14} /> {job.location || "N/A"}
             </span>
@@ -170,70 +95,88 @@ export default function ApplyPage({
               <DollarSign size={14} />
               {job.salary || job.stipend || "N/A"}
             </span>
+          </div>
+
+          <p className="mt-6 text-gray-300 leading-relaxed">
+            {job.description}
           </p>
 
-          <p className="mt-4 text-gray-300">
-            {job.description || "No description"}
-          </p>
+          <div className="mt-6">
+            <h3 className="text-sm mb-2 text-gray-400">Required Skills</h3>
+            <div className="flex flex-wrap gap-2">
+              {(job.skillsRequired || []).map((s) => (
+                <span
+                  key={s}
+                  className="px-3 py-1 bg-purple-500/30 rounded-full text-sm"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* AI BUTTON */}
-        {!aiData && (
-          <button
-            onClick={handleApplyWithAI}
-            className="bg-purple-600 px-6 py-3 rounded"
-          >
-            {loading ? "Generating..." : "Generate with AI"}
-          </button>
-        )}
+        {/* RIGHT SIDE — AI PANEL */}
+        <div className="bg-white/5 p-6 rounded-2xl border border-white/10">
 
-        {/* AI RESULT */}
-        {aiData && !applied && (
-          <div className="mt-6 space-y-6">
-
-            {/* RESUME */}
-            <div className="bg-white/5 p-4 rounded">
-              <h3 className="mb-2">Resume</h3>
-              <textarea
-                defaultValue={aiData.resume}
-                className="w-full h-40 bg-black p-3"
-              />
-            </div>
-
-            {/* COVER LETTER */}
-            <div className="bg-white/5 p-4 rounded">
-              <h3 className="mb-2">Cover Letter</h3>
-              <textarea
-                defaultValue={aiData.coverLetter}
-                className="w-full h-40 bg-black p-3"
-              />
-            </div>
-
-            {/* BUTTONS */}
-            <div className="flex gap-4">
+          {!aiData && (
+            <div className="text-center mt-10">
               <button
-                onClick={handleDownloadPDF}
-                className="bg-blue-500 px-4 py-2 rounded"
+                onClick={handleGenerate}
+                className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-semibold"
               >
-                Download PDF
-              </button>
-
-              <button
-                onClick={handleFinalSubmit}
-                className="bg-green-500 px-4 py-2 rounded"
-              >
-                Submit
+                {loading ? "Generating..." : "🚀 Generate with AI"}
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* SUCCESS */}
-        {applied && (
-          <div className="text-green-400 mt-10 text-center text-xl">
-            Application Submitted ✅
-          </div>
-        )}
+          {aiData && !applied && (
+            <div className="space-y-6">
+
+              {/* RESUME */}
+              <div>
+                <h3 className="mb-2 text-gray-300">Tailored Resume</h3>
+                <textarea
+                  defaultValue={aiData.resume}
+                  className="w-full h-40 bg-black/70 p-3 rounded-xl border border-white/10"
+                />
+              </div>
+
+              {/* COVER LETTER */}
+              <div>
+                <h3 className="mb-2 text-gray-300">Cover Letter</h3>
+                <textarea
+                  defaultValue={aiData.coverLetter}
+                  className="w-full h-40 bg-black/70 p-3 rounded-xl border border-white/10"
+                />
+              </div>
+
+              {/* ACTIONS */}
+              <div className="flex gap-4">
+                <button
+                  onClick={handleSubmit}
+                  className="flex-1 py-3 bg-green-500 rounded-xl font-semibold"
+                >
+                  Submit Application
+                </button>
+
+                <button
+                  onClick={handleGenerate}
+                  className="flex-1 py-3 bg-white/10 rounded-xl"
+                >
+                  Regenerate
+                </button>
+              </div>
+            </div>
+          )}
+
+          {applied && (
+            <div className="text-center text-green-400 text-xl mt-20">
+              ✅ Application Submitted
+            </div>
+          )}
+
+        </div>
       </main>
     </div>
   );
