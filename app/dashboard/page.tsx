@@ -45,123 +45,129 @@ export default function DashboardPage() {
   const [missingSkills, setMissingSkills] = useState<string[]>([]);
   const [roadmap, setRoadmap] = useState<RoadmapItem[]>([]);
   const [match, setMatch] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const [resumeText, setResumeText] = useState("");
   const [coverLetter, setCoverLetter] = useState("");
 
+  // AUTH
   useEffect(() => {
     if (status === "loading") return;
     if (!session) router.push("/login");
   }, [session, status]);
 
+  // FETCH DATA
   useEffect(() => {
     if (!session) return;
 
     const fetchData = async () => {
-      const profileRes = await fetch("/api/user/profile");
-      const profileData = await profileRes.json();
-      setUserProfile(profileData.user);
+      const profile = await fetch("/api/user/profile").then(res => res.json());
+      const jobs = await fetch("/api/internships").then(res => res.json());
+      const apps = await fetch("/api/applications").then(res => res.json());
 
-      const jobRes = await fetch("/api/internships");
-      const jobData = await jobRes.json();
-      setInternships(jobData.jobs);
-
-      const appRes = await fetch("/api/applications");
-      const appData = await appRes.json();
-      setApplications(appData.applications || []);
+      setUserProfile(profile.user);
+      setInternships(jobs.jobs);
+      setApplications(apps.applications || []);
     };
 
     fetchData();
   }, [session]);
 
-  // 🚀 ANALYZE
+  // ANALYZE
   const handleAnalyze = async () => {
-    if (!selectedJobId) return alert("Select a job first");
+    if (!selectedJobId) {
+      alert("Please select a job 👇 first");
+      return;
+    }
 
     const job = internships.find(j => j._id === selectedJobId);
-    if (!job || !userProfile) return;
+    if (!job) return;
 
-    setLoading(true);
-    setMissingSkills([]);
-    setRoadmap([]);
-    setMatch(null);
-
-    const userSkills = (userProfile.skills || []).map(s => s.toLowerCase());
+    const userSkills = (userProfile?.skills || []).map(s => s.toLowerCase());
     const required = job.skillsRequired || [];
 
     const missing = required.filter(
       s => !userSkills.includes(s.toLowerCase())
     );
 
-    const matchPercent = Math.round(
-      ((required.length - missing.length) / required.length) * 100
+    setMissingSkills(missing);
+    setMatch(
+      Math.round(((required.length - missing.length) / required.length) * 100)
     );
 
-    setMissingSkills(missing);
-    setMatch(matchPercent);
-
-    const roadmapData: RoadmapItem[] = [];
+    const roadmapResult: RoadmapItem[] = [];
 
     for (let skill of missing) {
-      const res = await fetch("/api/ai/roadmap", {
-        method: "POST",
-        body: JSON.stringify({ skill }),
-      });
+      try {
+        const res = await fetch("/api/ai/roadmap", {
+          method: "POST",
+          body: JSON.stringify({ skill }),
+        });
+        const data = await res.json();
 
-      const data = await res.json();
-
-      roadmapData.push({
-        skill,
-        steps: data.roadmap?.split("\n") || ["Learn basics", "Practice"],
-      });
+        roadmapResult.push({
+          skill,
+          steps: data.roadmap?.split("\n") || [],
+        });
+      } catch {
+        roadmapResult.push({
+          skill,
+          steps: ["Learn basics", "Practice", "Build projects"],
+        });
+      }
     }
 
-    setRoadmap(roadmapData);
-    setLoading(false);
+    setRoadmap(roadmapResult);
   };
 
-  // 🧾 RESUME
+  // RESUME
   const handleResume = async () => {
     const res = await fetch("/api/ai/resume", {
       method: "POST",
       body: JSON.stringify(userProfile),
     });
-
     const data = await res.json();
     setResumeText(data.resume);
   };
 
-  // 📄 COVER LETTER
-  const handleCoverLetter = async () => {
+  // COVER LETTER
+  const handleCover = async () => {
     const res = await fetch("/api/ai/cover-letter", {
       method: "POST",
       body: JSON.stringify(userProfile),
     });
-
     const data = await res.json();
     setCoverLetter(data.letter);
   };
 
-  if (status === "loading") return <p className="text-white">Loading...</p>;
+  if (!session) return null;
+
+  const features = [
+    { title: "Skill Gap Analyzer", icon: Brain, action: handleAnalyze },
+    { title: "Roadmap Generator", icon: Map, action: handleAnalyze },
+    { title: "Resume Builder", icon: FileText, action: handleResume },
+    { title: "Cover Letter Generator", icon: PenTool, action: handleCover },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-purple-950 to-pink-950 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-950 to-black text-white">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-6 py-20">
+      <main className="max-w-6xl mx-auto px-6 pt-24">
 
-        <h1 className="text-5xl font-bold mb-4">
-          Welcome back, {session?.user?.name}
+        <h1 className="text-5xl font-bold mb-2">
+          Welcome back, {session.user?.name?.split(" ")[0]}
         </h1>
 
-        {/* 🔥 JOB SELECTOR (FIXED ISSUE) */}
+        <p className="text-gray-400 mb-8">
+          Analyze your skills and generate smart roadmaps 🚀
+        </p>
+
+        {/* JOB SELECT */}
         <select
-          value={selectedJobId}
           onChange={(e) => setSelectedJobId(e.target.value)}
-          className="bg-black border border-white/20 p-3 rounded mb-6 w-full"
+          className="mb-10 p-3 rounded bg-black border border-purple-500"
         >
-          <option value="">Select Job</option>
+          <option value="">Select a job</option>
           {internships.map(job => (
             <option key={job._id} value={job._id}>
               {job.title} - {job.company}
@@ -169,39 +175,69 @@ export default function DashboardPage() {
           ))}
         </select>
 
-        {/* FEATURE BUTTONS */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
-          <button onClick={handleAnalyze} className="bg-purple-600 p-4 rounded">Skill Gap</button>
-          <button onClick={handleAnalyze} className="bg-pink-600 p-4 rounded">Roadmap</button>
-          <button onClick={handleResume} className="bg-blue-600 p-4 rounded">Resume</button>
-          <button onClick={handleCoverLetter} className="bg-green-600 p-4 rounded">Cover Letter</button>
+        {/* APPLICATIONS */}
+        <div className="bg-purple-900/40 p-6 rounded-xl mb-10">
+          <h2 className="text-xl font-bold mb-4">My Applications</h2>
+
+          {applications.length === 0 ? (
+            <p>No applications yet</p>
+          ) : (
+            applications.map((app, i) => (
+              <div key={i} className="bg-black/40 p-4 rounded mb-3">
+                <p>{app.jobTitle}</p>
+                <p className="text-gray-400">{app.company}</p>
+                <p className="text-green-400">{app.status}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* FEATURES */}
+        <div className="grid md:grid-cols-4 gap-6 mb-10">
+          {features.map((f, i) => {
+            const Icon = f.icon;
+
+            return (
+              <motion.div
+                key={i}
+                whileHover={{
+                  scale: 1.08,
+                  boxShadow: "0px 0px 25px rgba(168,85,247,0.8)"
+                }}
+                onClick={f.action}
+                className="p-6 bg-purple-800/30 rounded-xl text-center cursor-pointer transition"
+              >
+                <Icon className="mx-auto mb-3 text-pink-400" />
+                <p>{f.title}</p>
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* RESULTS */}
         {match !== null && (
-          <div className="mb-6">
-            <h2>Match: {match}%</h2>
-            <p>Missing Skills: {missingSkills.join(", ")}</p>
-          </div>
+          <div className="mb-6">Match: {match}%</div>
         )}
+
+        {missingSkills.map((skill, i) => (
+          <div key={i}>{skill}</div>
+        ))}
 
         {roadmap.map((r, i) => (
           <div key={i} className="mb-4">
             <h3>{r.skill}</h3>
             <ul>
-              {r.steps.map((s, j) => (
-                <li key={j}>• {s}</li>
-              ))}
+              {r.steps.map((s, j) => <li key={j}>• {s}</li>)}
             </ul>
           </div>
         ))}
 
         {resumeText && (
-          <textarea className="w-full h-40 bg-black mt-6" value={resumeText} readOnly />
+          <textarea value={resumeText} readOnly className="w-full h-40 mt-6 bg-black p-3" />
         )}
 
         {coverLetter && (
-          <textarea className="w-full h-40 bg-black mt-6" value={coverLetter} readOnly />
+          <textarea value={coverLetter} readOnly className="w-full h-40 mt-6 bg-black p-3" />
         )}
 
       </main>
