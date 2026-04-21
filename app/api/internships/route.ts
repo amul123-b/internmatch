@@ -53,9 +53,9 @@ export async function GET() {
     // 🔥 OPTIONAL FILTER (only relevant jobs)
     const filtered = scoredJobs.filter((job: any) => job.matchPercent > 0);
 
-    return NextResponse.json({
-      jobs: filtered.length > 0 ? filtered : scoredJobs,
-    });
+   return NextResponse.json({
+  jobs: scoredJobs,
+});
 
   } catch (err) {
     console.error(err);
