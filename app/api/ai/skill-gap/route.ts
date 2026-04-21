@@ -1,51 +1,28 @@
 import { NextResponse } from "next/server";
-import clientPromise from "@/lib/mongodb";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const { userSkills, requiredSkills } = await req.json();
 
-    if (!session?.user?.email) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
-
-    const { jobTitle } = await req.json();
-
-    const client = await clientPromise;
-    const db = client.db();
-
-    const user = await db.collection("users").findOne({
-      email: session.user.email,
-    });
-
-    const userSkills = user?.skills || [];
-
-    // 🔥 Simulated job skills (later dynamic)
-    const jobSkills = ["React", "Node.js", "MongoDB", "AWS"];
-
-    const missingSkills = jobSkills.filter(
-      (skill) => !userSkills.includes(skill)
+    const missingSkills = (requiredSkills || []).filter(
+      (skill: string) =>
+        !(userSkills || []).map((s: string) => s.toLowerCase()).includes(skill.toLowerCase())
     );
 
-    const matchPercentage = Math.round(
-      ((jobSkills.length - missingSkills.length) / jobSkills.length) * 100
-    );
+    const match =
+      requiredSkills.length === 0
+        ? 0
+        : Math.round(
+            ((requiredSkills.length - missingSkills.length) /
+              requiredSkills.length) *
+              100
+          );
 
     return NextResponse.json({
-      success: true,
-      jobSkills,
       missingSkills,
-      matchPercentage,
+      match,
     });
-
-  } catch (error) {
-    console.error(error);
-
-    return NextResponse.json(
-      { message: "Skill gap error" },
-      { status: 500 }
-    );
+  } catch {
+    return NextResponse.json({ missingSkills: [], match: 0 });
   }
 }
