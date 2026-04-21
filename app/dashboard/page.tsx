@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Brain, Map, FileText, PenTool, ChevronRight } from "lucide-react";
+import { Brain, Map, FileText, PenTool } from "lucide-react";
 import { useState, useEffect } from "react";
 import Navbar from "@/app/components/Navbar";
 import FloatingChatbot from "@/app/components/FloatingChatbot";
@@ -50,32 +50,26 @@ export default function DashboardPage() {
   const [resumeText, setResumeText] = useState("");
   const [coverLetter, setCoverLetter] = useState("");
 
-  // 🔐 AUTH
   useEffect(() => {
     if (status === "loading") return;
     if (!session) router.push("/login");
-  }, [session, status, router]);
+  }, [session, status]);
 
-  // 📦 FETCH DATA
   useEffect(() => {
     if (!session) return;
 
     const fetchData = async () => {
-      try {
-        const profileRes = await fetch("/api/user/profile");
-        const profileData = await profileRes.json();
-        setUserProfile(profileData.user);
+      const profileRes = await fetch("/api/user/profile");
+      const profileData = await profileRes.json();
+      setUserProfile(profileData.user);
 
-        const jobRes = await fetch("/api/internships");
-        const jobData = await jobRes.json();
-        setInternships(jobData.jobs);
+      const jobRes = await fetch("/api/internships");
+      const jobData = await jobRes.json();
+      setInternships(jobData.jobs);
 
-        const appRes = await fetch("/api/applications");
-        const appData = await appRes.json();
-        setApplications(appData.applications || []);
-      } catch (err) {
-        console.error(err);
-      }
+      const appRes = await fetch("/api/applications");
+      const appData = await appRes.json();
+      setApplications(appData.applications || []);
     };
 
     fetchData();
@@ -83,176 +77,133 @@ export default function DashboardPage() {
 
   // 🚀 ANALYZE
   const handleAnalyze = async () => {
-    if (!userProfile) return alert("Profile loading...");
     if (!selectedJobId) return alert("Select a job first");
 
+    const job = internships.find(j => j._id === selectedJobId);
+    if (!job || !userProfile) return;
+
     setLoading(true);
-    setRoadmap([]);
     setMissingSkills([]);
+    setRoadmap([]);
     setMatch(null);
 
-    try {
-      const job = internships.find(j => j._id === selectedJobId);
-      if (!job) throw new Error("Job not found");
+    const userSkills = (userProfile.skills || []).map(s => s.toLowerCase());
+    const required = job.skillsRequired || [];
 
-      const userSkills = (userProfile.skills || []).map(s => s.toLowerCase());
-      const required = job.skillsRequired || [];
+    const missing = required.filter(
+      s => !userSkills.includes(s.toLowerCase())
+    );
 
-      const missing = required.filter(
-        s => !userSkills.includes(s.toLowerCase())
-      );
+    const matchPercent = Math.round(
+      ((required.length - missing.length) / required.length) * 100
+    );
 
-      const matchPercent = Math.round(
-        ((required.length - missing.length) / required.length) * 100
-      );
+    setMissingSkills(missing);
+    setMatch(matchPercent);
 
-      setMissingSkills(missing);
-      setMatch(matchPercent);
+    const roadmapData: RoadmapItem[] = [];
 
-      const roadmapResult: RoadmapItem[] = [];
+    for (let skill of missing) {
+      const res = await fetch("/api/ai/roadmap", {
+        method: "POST",
+        body: JSON.stringify({ skill }),
+      });
 
-      for (let skill of missing) {
-        try {
-          const res = await fetch("/api/ai/roadmap", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ skill }),
-          });
+      const data = await res.json();
 
-          const data = await res.json();
-
-          roadmapResult.push({
-            skill,
-            steps:
-              data.roadmap
-                ?.split("\n")
-                .map((s: string) => s.trim())
-                .filter((s: string) => s) || [],
-          });
-        } catch {
-          roadmapResult.push({
-            skill,
-            steps: ["Learn basics", "Practice projects", "Apply in real tasks"],
-          });
-        }
-      }
-
-      setRoadmap(roadmapResult);
-    } catch (err) {
-      console.error(err);
-      alert("Analysis failed");
-    } finally {
-      setLoading(false);
+      roadmapData.push({
+        skill,
+        steps: data.roadmap?.split("\n") || ["Learn basics", "Practice"],
+      });
     }
+
+    setRoadmap(roadmapData);
+    setLoading(false);
   };
 
   // 🧾 RESUME
   const handleResume = async () => {
-    if (!userProfile) return;
-
     const res = await fetch("/api/ai/resume", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: userProfile.name,
-        role: userProfile.role || "Software Developer",
-        skills: userProfile.skills || [],
-      }),
+      body: JSON.stringify(userProfile),
     });
 
     const data = await res.json();
-    setResumeText(data.resume || "❌ Failed");
+    setResumeText(data.resume);
   };
 
   // 📄 COVER LETTER
   const handleCoverLetter = async () => {
-    if (!userProfile) return;
-
     const res = await fetch("/api/ai/cover-letter", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: userProfile.name,
-        role: userProfile.role || "Software Intern",
-        company: "Target Company",
-      }),
+      body: JSON.stringify(userProfile),
     });
 
     const data = await res.json();
-    setCoverLetter(data.letter || "❌ Failed");
+    setCoverLetter(data.letter);
   };
 
-  if (status === "loading") {
-    return <p className="text-white text-center mt-20">Loading...</p>;
-  }
-
-  if (!session) return null;
-
-  const features = [
-    { title: "Skill Gap Analyzer", icon: Brain, action: handleAnalyze },
-    { title: "Roadmap Generator", icon: Map, action: handleAnalyze },
-    { title: "Resume Builder", icon: FileText, action: handleResume },
-    { title: "Cover Letter Generator", icon: PenTool, action: handleCoverLetter },
-  ];
+  if (status === "loading") return <p className="text-white">Loading...</p>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-purple-950 to-pink-950 text-white">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-6 py-12 pt-24">
+      <main className="max-w-6xl mx-auto px-6 py-20">
 
-        <h1 className="text-5xl font-extrabold mb-2">
-          Welcome back, {session.user?.name?.split(" ")[0] || "User"}
+        <h1 className="text-5xl font-bold mb-4">
+          Welcome back, {session?.user?.name}
         </h1>
 
-        <p className="text-gray-300 mb-10">
-          Analyze your skills and generate smart roadmaps.
-        </p>
+        {/* 🔥 JOB SELECTOR (FIXED ISSUE) */}
+        <select
+          value={selectedJobId}
+          onChange={(e) => setSelectedJobId(e.target.value)}
+          className="bg-black border border-white/20 p-3 rounded mb-6 w-full"
+        >
+          <option value="">Select Job</option>
+          {internships.map(job => (
+            <option key={job._id} value={job._id}>
+              {job.title} - {job.company}
+            </option>
+          ))}
+        </select>
 
-        {/* 🔥 APPLICATION TRACKER (ADDED ONLY THIS BLOCK) */}
-        <div className="bg-white/5 p-6 rounded-xl mb-10">
-          <h2 className="text-xl font-bold mb-4">My Applications</h2>
-
-          {applications.length === 0 ? (
-            <p className="text-gray-400">No applications yet</p>
-          ) : (
-            applications.map((app, i) => (
-              <div key={i} className="mb-3 p-4 bg-black/40 rounded-xl border border-white/10">
-                <p className="font-bold text-white">{app.jobTitle}</p>
-                <p className="text-sm text-gray-400">{app.company}</p>
-                <p className="text-green-400 text-sm">{app.status}</p>
-              </div>
-            ))
-          )}
+        {/* FEATURE BUTTONS */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
+          <button onClick={handleAnalyze} className="bg-purple-600 p-4 rounded">Skill Gap</button>
+          <button onClick={handleAnalyze} className="bg-pink-600 p-4 rounded">Roadmap</button>
+          <button onClick={handleResume} className="bg-blue-600 p-4 rounded">Resume</button>
+          <button onClick={handleCoverLetter} className="bg-green-600 p-4 rounded">Cover Letter</button>
         </div>
 
-        {/* YOUR EXISTING UI BELOW (UNCHANGED) */}
+        {/* RESULTS */}
+        {match !== null && (
+          <div className="mb-6">
+            <h2>Match: {match}%</h2>
+            <p>Missing Skills: {missingSkills.join(", ")}</p>
+          </div>
+        )}
 
-        <div className="grid md:grid-cols-4 gap-6 mb-12">
-          {features.map((f, i) => {
-            const Icon = f.icon;
+        {roadmap.map((r, i) => (
+          <div key={i} className="mb-4">
+            <h3>{r.skill}</h3>
+            <ul>
+              {r.steps.map((s, j) => (
+                <li key={j}>• {s}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
 
-            return (
-              <motion.div
-                key={i}
-                whileHover={{ scale: 1.05 }}
-                onClick={f.action}
-                className="p-6 bg-white/5 rounded-xl text-center cursor-pointer hover:bg-white/10 transition"
-              >
-                <Icon className="mx-auto mb-3 text-pink-400" />
-                <p className="text-white text-sm font-semibold">
-                  {f.title}
-                </p>
-              </motion.div>
-            );
-          })}
-        </div>
+        {resumeText && (
+          <textarea className="w-full h-40 bg-black mt-6" value={resumeText} readOnly />
+        )}
 
-        {/* rest of your UI stays SAME */}
+        {coverLetter && (
+          <textarea className="w-full h-40 bg-black mt-6" value={coverLetter} readOnly />
+        )}
+
       </main>
 
       <FloatingChatbot />
