@@ -4,27 +4,47 @@ export async function POST(req: Request) {
   try {
     const { name, role, skills } = await req.json();
 
+    if (!name) {
+      return NextResponse.json({ resume: "Invalid input" });
+    }
+
+    const skillsText = (skills || []).join(", ");
+
     const resume = `
 ${name}
-Role: ${role}
+${role || "Software Developer"}
 
-SKILLS:
-${skills.join(", ")}
+----------------------------
+SKILLS
+${skillsText || "Not specified"}
 
-PROJECTS:
-- Built projects using above skills
+----------------------------
+PROJECTS
+- Built real-world applications using modern technologies
+- Developed scalable and efficient solutions
+- Worked on frontend and backend systems
 
-EXPERIENCE:
-- Fresher / Student
+----------------------------
+EXPERIENCE
+- Hands-on coding experience with multiple technologies
+- Strong problem-solving and debugging skills
 
-EDUCATION:
-- B.Tech / Degree (Not Provided)
-`;
+----------------------------
+EDUCATION
+Bachelor's Degree in Computer Science (or related field)
 
-    return NextResponse.json({ resume });
-  } catch (err) {
+----------------------------
+SUMMARY
+Passionate developer with strong interest in building scalable applications and learning new technologies.
+    `;
+
+    return NextResponse.json({
+      resume: resume.trim(),
+    });
+
+  } catch (error) {
     return NextResponse.json(
-      { resume: "Resume generation failed" },
+      { resume: "Error generating resume" },
       { status: 500 }
     );
   }

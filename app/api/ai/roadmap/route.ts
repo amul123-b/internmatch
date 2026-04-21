@@ -1,54 +1,67 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function POST(req: Request) {
   try {
     const { skill } = await req.json();
 
     if (!skill) {
-      return NextResponse.json(
-        { message: "Skill is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ roadmap: "No skill provided" });
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const roadmapMap: Record<string, string> = {
+      react: `
+Learn JSX and Components
+Understand Hooks (useState, useEffect)
+Build small projects (Todo App, Weather App)
+Learn state management (Context / Redux)
+Build full-stack apps with Next.js
+      `,
 
-    try {
-      const model = genAI.getGenerativeModel({
-        model: "gemini-pro",
-      });
+      node: `
+Learn Node.js basics
+Understand Express.js
+Build REST APIs
+Connect with MongoDB
+Add authentication (JWT)
+Deploy backend
+      `,
 
-      const result = await model.generateContent(
-        `Create a step-by-step roadmap to learn ${skill} from beginner to advanced in 10 clear steps. Return each step on a new line.`
-      );
+      mongodb: `
+Understand NoSQL concepts
+Learn CRUD operations
+Use MongoDB Atlas
+Integrate with Node.js
+Optimize queries & indexing
+      `,
 
-      const text = result.response.text().trim();
+      aws: `
+Learn cloud basics
+Understand EC2, S3
+Deploy simple apps
+Learn IAM & security
+Explore serverless (Lambda)
+      `,
+    };
 
-      return NextResponse.json({ roadmap: text });
+    const key = skill.toLowerCase();
 
-    } catch (err) {
-      console.error("AI FAILED → using fallback");
+    const roadmap =
+      roadmapMap[key] ||
+      `
+Learn basics of ${skill}
+Practice with small projects
+Build real-world applications
+Explore advanced concepts
+Keep improving with practice
+`;
 
-      return NextResponse.json({
-        roadmap: `1. Learn basics of ${skill}
-2. Practice fundamentals
-3. Build small projects
-4. Learn intermediate concepts
-5. Work on real-world projects
-6. Learn advanced topics
-7. Optimize and improve code
-8. Build portfolio projects
-9. Prepare for interviews
-10. Apply for jobs`,
-      });
-    }
+    return NextResponse.json({
+      roadmap: roadmap.trim(),
+    });
 
   } catch (error) {
-    console.error("ROADMAP ERROR:", error);
-
     return NextResponse.json(
-      { message: "Error generating roadmap" },
+      { roadmap: "Error generating roadmap" },
       { status: 500 }
     );
   }
