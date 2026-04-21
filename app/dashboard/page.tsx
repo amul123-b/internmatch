@@ -7,11 +7,19 @@ import { Brain, Map, FileText, PenTool, ChevronRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import Navbar from "@/app/components/Navbar";
 import FloatingChatbot from "@/app/components/FloatingChatbot";
+
+// ✅ TYPES
 type Internship = {
   _id: string;
   title: string;
   company: string;
   skillsRequired?: string[];
+};
+
+type Application = {
+  jobTitle: string;
+  company: string;
+  status: string;
 };
 
 type UserProfile = {
@@ -32,14 +40,13 @@ export default function DashboardPage() {
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [internships, setInternships] = useState<Internship[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [selectedJobId, setSelectedJobId] = useState("");
 
-  const [missingSkills, setMissingSkills] = useState<string[]>([]);
   const [roadmap, setRoadmap] = useState<RoadmapItem[]>([]);
   const [match, setMatch] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // 🔥 AI OUTPUT STATES
   const [resumeText, setResumeText] = useState("");
   const [coverLetter, setCoverLetter] = useState("");
 
@@ -49,7 +56,7 @@ export default function DashboardPage() {
     if (!session) router.push("/login");
   }, [session, status, router]);
 
-  // 📦 FETCH DATA
+  // 📦 FETCH ALL DATA
   useEffect(() => {
     if (!session) return;
 
@@ -62,6 +69,12 @@ export default function DashboardPage() {
         const jobRes = await fetch("/api/internships");
         const jobData = await jobRes.json();
         setInternships(jobData.jobs);
+
+        // ✅ FETCH APPLICATIONS
+        const appRes = await fetch("/api/applications");
+        const appData = await appRes.json();
+        setApplications(appData.applications || []);
+
       } catch (err) {
         console.error("Fetch error:", err);
       }
@@ -70,19 +83,18 @@ export default function DashboardPage() {
     fetchData();
   }, [session]);
 
-  // 🚀 SKILL ANALYSIS
+  // 🚀 ANALYZE
   const handleAnalyze = async () => {
     if (!userProfile) return alert("Profile loading...");
-    if (!selectedJobId) return alert("Select a job first");
+    if (!selectedJobId) return alert("Select a job");
 
     setLoading(true);
     setRoadmap([]);
-    setMissingSkills([]);
     setMatch(null);
 
     try {
       const job = internships.find(j => j._id === selectedJobId);
-      if (!job) throw new Error("Job not found");
+      if (!job) return;
 
       const userSkills = (userProfile.skills || []).map(s => s.toLowerCase());
       const required = job.skillsRequired || [];
@@ -91,15 +103,13 @@ export default function DashboardPage() {
         s => !userSkills.includes(s.toLowerCase())
       );
 
-      const matchPercent = Math.max(
-        0,
-        Math.round(((required.length - missing.length) / required.length) * 100)
+      const percent = Math.round(
+        ((required.length - missing.length) / required.length) * 100
       );
 
-      setMissingSkills(missing);
-      setMatch(matchPercent);
+      setMatch(percent);
 
-      const roadmapResult: RoadmapItem[] = [];
+      const roadmapData: RoadmapItem[] = [];
 
       for (let skill of missing) {
         try {
@@ -111,221 +121,154 @@ export default function DashboardPage() {
 
           const data = await res.json();
 
-          roadmapResult.push({
+          roadmapData.push({
             skill,
-            steps: data.roadmap
-              ?.split("\n")
-              .map((s: string) => s.trim())
-              .filter((s: string) => s),
+            steps: data.roadmap?.split("\n") || [],
           });
         } catch {
-          roadmapResult.push({
+          roadmapData.push({
             skill,
-            steps: ["Learn basics", "Practice projects", "Apply in real tasks"],
+            steps: ["Learn basics", "Practice", "Build projects"],
           });
         }
       }
 
-      setRoadmap(roadmapResult);
+      setRoadmap(roadmapData);
 
-    } catch (err) {
-      console.error(err);
+    } catch {
       alert("Analysis failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔥 RESUME BUILDER
+  // 🧾 RESUME
   const handleResume = async () => {
     if (!userProfile) return;
 
-    try {
-      const res = await fetch("/api/ai/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: userProfile.name,
-          role: userProfile.role || "Software Developer",
-          skills: userProfile.skills || [],
-        }),
-      });
+    const res = await fetch("/api/ai/resume", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: userProfile.name,
+        role: userProfile.role,
+        skills: userProfile.skills,
+      }),
+    });
 
-      const data = await res.json();
-
-      if (!res.ok || !data.resume) {
-        setResumeText("❌ Resume generation failed.");
-        return;
-      }
-
-      setResumeText(data.resume);
-
-    } catch (err) {
-      console.error(err);
-      setResumeText("❌ Resume generation error.");
-    }
+    const data = await res.json();
+    setResumeText(data.resume || "Failed");
   };
 
-  // 🔥 COVER LETTER
+  // 📄 COVER LETTER
   const handleCoverLetter = async () => {
     if (!userProfile) return;
 
-    try {
-      const res = await fetch("/api/ai/cover-letter", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: userProfile.name,
-          role: userProfile.role || "Software Intern",
-          company: "Target Company",
-        }),
-      });
+    const res = await fetch("/api/ai/cover-letter", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: userProfile.name,
+        role: userProfile.role,
+        company: "Target Company",
+      }),
+    });
 
-      const data = await res.json();
-
-      if (!res.ok || !data.letter) {
-        setCoverLetter("❌ Cover letter generation failed.");
-        return;
-      }
-
-      setCoverLetter(data.letter);
-
-    } catch (err) {
-      console.error(err);
-      setCoverLetter("❌ Cover letter error.");
-    }
+    const data = await res.json();
+    setCoverLetter(data.letter || "Failed");
   };
 
-  if (status === "loading") {
-    return <p className="text-white text-center mt-20">Loading...</p>;
-  }
-
+  if (status === "loading") return null;
   if (!session) return null;
 
-  const features = [
-    { title: "Skill Gap Analyzer", icon: Brain, action: handleAnalyze },
-    { title: "Roadmap Generator", icon: Map, action: handleAnalyze },
-    { title: "Resume Builder", icon: FileText, action: handleResume },
-    { title: "Cover Letter Generator", icon: PenTool, action: handleCoverLetter },
-  ];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-purple-950 to-pink-950 text-white">
+    <div className="min-h-screen bg-black text-white">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-6 py-12 pt-24">
+      <main className="max-w-6xl mx-auto px-6 py-20">
 
-        <h1 className="text-5xl font-extrabold mb-2">
-          Welcome back, {session.user?.name?.split(" ")[0] || "User"}
+        <h1 className="text-4xl font-bold mb-6">
+          Welcome {session.user?.name}
         </h1>
 
-        <p className="text-gray-300 mb-10">
-          Analyze your skills and generate smart roadmaps.
-        </p>
+        {/* 🔥 APPLICATION TRACKER */}
+        <div className="bg-white/5 p-6 rounded mb-10">
+          <h2 className="text-xl mb-4">My Applications</h2>
 
-        {/* TOP CARDS */}
-        <div className="grid md:grid-cols-4 gap-6 mb-12">
-          {features.map((f, i) => {
-            const Icon = f.icon;
-
-            return (
-              <motion.div
-                key={i}
-                whileHover={{ scale: 1.05 }}
-                onClick={f.action}
-                className="p-6 bg-white/5 rounded-xl text-center cursor-pointer hover:bg-white/10 transition"
-              >
-                <Icon className="mx-auto mb-3 text-pink-400" />
-                <p className="text-white text-sm font-semibold">
-                  {f.title}
-                </p>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {/* RESULTS */}
-        {resumeText && (
-          <div className="bg-white/5 p-6 rounded-xl mb-6">
-            <h2 className="mb-3 text-cyan-300">Generated Resume</h2>
-            <pre className="whitespace-pre-wrap">{resumeText}</pre>
-          </div>
-        )}
-
-        {coverLetter && (
-          <div className="bg-white/5 p-6 rounded-xl mb-6">
-            <h2 className="mb-3 text-cyan-300">Cover Letter</h2>
-            <pre className="whitespace-pre-wrap">{coverLetter}</pre>
-          </div>
-        )}
-
-        {/* MAIN GRID */}
-        <div className="grid lg:grid-cols-2 gap-8">
-
-          {/* SKILL GAP */}
-          <div className="bg-white/5 p-6 rounded-xl">
-            <h2 className="flex gap-2 mb-4">
-              <Brain /> Skill Gap
-            </h2>
-
-            <select
-              value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="w-full p-2 mb-4 bg-black/50"
-            >
-              <option value="">Select job</option>
-              {internships.map(j => (
-                <option key={j._id} value={j._id}>
-                  {j.title} @ {j.company}
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={handleAnalyze}
-              className="bg-purple-600 px-4 py-2 rounded"
-            >
-              {loading ? "Analyzing..." : "Analyze"}
-            </button>
-
-            {match !== null && (
-              <div className="mt-4">
-                <p className="text-green-400 font-bold">
-                  Match: {match}%
-                </p>
+          {applications.length === 0 ? (
+            <p>No applications yet</p>
+          ) : (
+            applications.map((app, i) => (
+              <div key={i} className="p-3 mb-2 bg-black/40 rounded">
+                <p className="font-bold">{app.jobTitle}</p>
+                <p>{app.company}</p>
+                <p className="text-green-400">{app.status}</p>
               </div>
-            )}
-          </div>
-
-          {/* ROADMAP */}
-          <div className="bg-white/5 p-6 rounded-xl">
-            <h2 className="flex gap-2 mb-4">
-              <Map /> Roadmap
-            </h2>
-
-            {roadmap.length === 0 ? (
-              <p>No roadmap yet</p>
-            ) : (
-              roadmap.map((r, i) => (
-                <div key={i} className="mb-4">
-                  <h3 className="text-cyan-300">{r.skill}</h3>
-                  <ul>
-                    {r.steps.map((step, j) => (
-                      <li key={j} className="flex gap-2">
-                        <ChevronRight /> {step}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            )}
-          </div>
-
+            ))
+          )}
         </div>
+
+        {/* 🎯 FEATURE CARDS */}
+        <div className="grid md:grid-cols-4 gap-6 mb-10">
+          {[ 
+            { title: "Analyze", action: handleAnalyze },
+            { title: "Roadmap", action: handleAnalyze },
+            { title: "Resume", action: handleResume },
+            { title: "Cover Letter", action: handleCoverLetter },
+          ].map((f, i) => (
+            <motion.div
+              key={i}
+              whileHover={{ scale: 1.05 }}
+              onClick={f.action}
+              className="p-6 bg-white/5 rounded cursor-pointer text-center"
+            >
+              {f.title}
+            </motion.div>
+          ))}
+        </div>
+
+        {/* JOB SELECT */}
+        <select
+          value={selectedJobId}
+          onChange={(e) => setSelectedJobId(e.target.value)}
+          className="p-2 mb-4 bg-black"
+        >
+          <option value="">Select job</option>
+          {internships.map(j => (
+            <option key={j._id} value={j._id}>
+              {j.title}
+            </option>
+          ))}
+        </select>
+
+        {/* MATCH */}
+        {match !== null && (
+          <p className="text-green-400">Match: {match}%</p>
+        )}
+
+        {/* ROADMAP */}
+        {roadmap.map((r, i) => (
+          <div key={i}>
+            <h3>{r.skill}</h3>
+            {r.steps.map((s, j) => (
+              <p key={j}>- {s}</p>
+            ))}
+          </div>
+        ))}
+
+        {/* RESUME */}
+        {resumeText && (
+          <pre className="bg-white/5 p-4 mt-6">{resumeText}</pre>
+        )}
+
+        {/* COVER LETTER */}
+        {coverLetter && (
+          <pre className="bg-white/5 p-4 mt-6">{coverLetter}</pre>
+        )}
 
       </main>
 
