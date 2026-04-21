@@ -2,66 +2,23 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { skill } = await req.json();
+    const { skills } = await req.json();
 
-    if (!skill) {
-      return NextResponse.json({ roadmap: "No skill provided" });
+    if (!skills || skills.length === 0) {
+      return NextResponse.json({ roadmap: [] });
     }
 
-    const roadmapMap: Record<string, string> = {
-      react: `
-Learn JSX and Components
-Understand Hooks (useState, useEffect)
-Build small projects (Todo App, Weather App)
-Learn state management (Context / Redux)
-Build full-stack apps with Next.js
-      `,
+    const roadmap = skills.map((skill: string, i: number) => ({
+      step: i + 1,
+      title: `Learn ${skill}`,
+      description: `Practice ${skill} with projects and real-world tasks`,
+    }));
 
-      node: `
-Learn Node.js basics
-Understand Express.js
-Build REST APIs
-Connect with MongoDB
-Add authentication (JWT)
-Deploy backend
-      `,
+    return NextResponse.json({ roadmap });
 
-      mongodb: `
-Understand NoSQL concepts
-Learn CRUD operations
-Use MongoDB Atlas
-Integrate with Node.js
-Optimize queries & indexing
-      `,
-
-      aws: `
-Learn cloud basics
-Understand EC2, S3
-Deploy simple apps
-Learn IAM & security
-Explore serverless (Lambda)
-      `,
-    };
-
-    const key = skill.toLowerCase();
-
-    const roadmap =
-      roadmapMap[key] ||
-      `
-Learn basics of ${skill}
-Practice with small projects
-Build real-world applications
-Explore advanced concepts
-Keep improving with practice
-`;
-
-    return NextResponse.json({
-      roadmap: roadmap.trim(),
-    });
-
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { roadmap: "Error generating roadmap" },
+      { message: "Roadmap error" },
       { status: 500 }
     );
   }
