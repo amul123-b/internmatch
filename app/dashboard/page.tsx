@@ -7,7 +7,12 @@ import { Brain, Map, FileText, PenTool, ChevronRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import Navbar from "@/app/components/Navbar";
 import FloatingChatbot from "@/app/components/FloatingChatbot";
-import { Internship } from "@/app/api/internships/route";
+type Internship = {
+  _id: string;
+  title: string;
+  company: string;
+  skillsRequired?: string[];
+};
 
 type UserProfile = {
   name: string;
@@ -34,17 +39,17 @@ export default function DashboardPage() {
   const [match, setMatch] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // 🔥 NEW STATES
+  // 🔥 AI OUTPUT STATES
   const [resumeText, setResumeText] = useState("");
   const [coverLetter, setCoverLetter] = useState("");
 
-  // 🔐 Auth check
+  // 🔐 AUTH CHECK
   useEffect(() => {
     if (status === "loading") return;
     if (!session) router.push("/login");
   }, [session, status, router]);
 
-  // 📦 Fetch data
+  // 📦 FETCH DATA
   useEffect(() => {
     if (!session) return;
 
@@ -65,7 +70,7 @@ export default function DashboardPage() {
     fetchData();
   }, [session]);
 
-  // 🚀 ANALYZE FUNCTION
+  // 🚀 SKILL ANALYSIS
   const handleAnalyze = async () => {
     if (!userProfile) return alert("Profile loading...");
     if (!selectedJobId) return alert("Select a job first");
@@ -97,21 +102,28 @@ export default function DashboardPage() {
       const roadmapResult: RoadmapItem[] = [];
 
       for (let skill of missing) {
-        const res = await fetch("/api/ai/roadmap", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ skill }),
-        });
+        try {
+          const res = await fetch("/api/ai/roadmap", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ skill }),
+          });
 
-        const data = await res.json();
+          const data = await res.json();
 
-        roadmapResult.push({
-          skill,
-          steps: data.roadmap
-            ?.split("\n")
-            .map((s: string) => s.trim())
-            .filter((s: string) => s),
-        });
+          roadmapResult.push({
+            skill,
+            steps: data.roadmap
+              ?.split("\n")
+              .map((s: string) => s.trim())
+              .filter((s: string) => s),
+          });
+        } catch {
+          roadmapResult.push({
+            skill,
+            steps: ["Learn basics", "Practice projects", "Apply in real tasks"],
+          });
+        }
       }
 
       setRoadmap(roadmapResult);
@@ -128,40 +140,64 @@ export default function DashboardPage() {
   const handleResume = async () => {
     if (!userProfile) return;
 
-    const res = await fetch("/api/ai/resume", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: userProfile.name,
-        role: userProfile.role || "Software Developer",
-        skills: userProfile.skills || [],
-      }),
-    });
+    try {
+      const res = await fetch("/api/ai/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: userProfile.name,
+          role: userProfile.role || "Software Developer",
+          skills: userProfile.skills || [],
+        }),
+      });
 
-    const data = await res.json();
-    setResumeText(data.resume);
+      const data = await res.json();
+
+      if (!res.ok || !data.resume) {
+        setResumeText("❌ Resume generation failed.");
+        return;
+      }
+
+      setResumeText(data.resume);
+
+    } catch (err) {
+      console.error(err);
+      setResumeText("❌ Resume generation error.");
+    }
   };
 
   // 🔥 COVER LETTER
   const handleCoverLetter = async () => {
     if (!userProfile) return;
 
-    const res = await fetch("/api/ai/cover-letter", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: userProfile.name,
-        role: "Software Intern",
-        company: "Target Company",
-      }),
-    });
+    try {
+      const res = await fetch("/api/ai/cover-letter", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: userProfile.name,
+          role: userProfile.role || "Software Intern",
+          company: "Target Company",
+        }),
+      });
 
-    const data = await res.json();
-    setCoverLetter(data.letter);
+      const data = await res.json();
+
+      if (!res.ok || !data.letter) {
+        setCoverLetter("❌ Cover letter generation failed.");
+        return;
+      }
+
+      setCoverLetter(data.letter);
+
+    } catch (err) {
+      console.error(err);
+      setCoverLetter("❌ Cover letter error.");
+    }
   };
 
   if (status === "loading") {

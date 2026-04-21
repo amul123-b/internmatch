@@ -1,227 +1,300 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { Brain, Map, FileText, PenTool, ChevronRight } from "lucide-react";
-import { useState, useEffect } from "react";
-import Navbar from "@/app/components/Navbar";
-import FloatingChatbot from "@/app/components/FloatingChatbot";
-import { Internship } from "@/app/api/internships/route";
+import { motion, AnimatePresence } from "framer-motion";
 
-type UserProfile = {
-  name: string;
-  email: string;
-  role?: string;
-  skills?: string[];
-};
+const ROLES = [
+  "Software Developer","Frontend Developer","Backend Developer",
+  "Full Stack Developer","Data Scientist","AI/ML Engineer",
+  "UI/UX Designer","DevOps Engineer","Cybersecurity Analyst",
+  "Product Manager"
+];
 
-interface RoadmapItem {
-  skill: string;
-  steps: string[];
-}
+const ALL_SKILLS = [
+  "JavaScript","TypeScript","Python","Java","C++","React","Next.js",
+  "Node.js","Express","MongoDB","MySQL","PostgreSQL","Firebase",
+  "AWS","Docker","Kubernetes","Git","GitHub","REST APIs","GraphQL",
+  "Tailwind CSS","Redux","Figma","Adobe XD","UI Design","UX Research",
+  "Machine Learning","Deep Learning","NLP","TensorFlow","PyTorch",
+  "Data Analysis","Pandas","NumPy","Matplotlib","Seaborn",
+  "Linux","Bash","CI/CD","Jenkins","Agile","Scrum",
+  "Cybersecurity","Pen Testing","Networking","Cloud Computing",
+  "HTML","CSS","Bootstrap","SASS","Three.js","WebSockets",
+  "Microservices","System Design","OOP","DSA",
+  "Testing","Jest","Cypress","Playwright",
+  "Android","iOS","React Native","Flutter",
+  "Blockchain","Solidity","Web3",
+  "Communication","Problem Solving","Leadership"
+];
 
-export default function DashboardPage() {
-  const { data: session, status } = useSession();
+export default function OnboardingPage() {
+  const { data: session, update } = useSession();
   const router = useRouter();
 
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [internships, setInternships] = useState<Internship[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState("");
-
-  const [missingSkills, setMissingSkills] = useState<string[]>([]);
-  const [roadmap, setRoadmap] = useState<RoadmapItem[]>([]);
-  const [match, setMatch] = useState<number>(0);
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  // 🔐 Auth check
+  const [search, setSearch] = useState("");
+  const [customSkill, setCustomSkill] = useState("");
+
+  const [formData, setFormData] = useState({
+    role: "",
+    mode: "",
+    skills: [] as string[],
+    education: "",
+    experience: "",
+    resumeText: ""
+  });
+
+  // 🔐 Redirect if already onboarded
   useEffect(() => {
-    if (status === "loading") return;
-    if (!session) router.push("/login");
-  }, [session, status]);
+    if ((session?.user as any)?.isOnboarded) {
+      router.push("/internships");
+    }
+  }, [session, router]);
 
-  // 📦 Fetch data
-  useEffect(() => {
-    if (!session) return;
+  // 🎯 Toggle Skill
+  const toggleSkill = (skill: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      skills: prev.skills.includes(skill)
+        ? prev.skills.filter((s) => s !== skill)
+        : [...prev.skills, skill],
+    }));
+  };
 
-    fetch("/api/user/profile")
-      .then(res => res.json())
-      .then(data => setUserProfile(data.user));
+  // ➕ Add custom skill
+  const addCustomSkill = () => {
+    if (!customSkill.trim()) return;
 
-    fetch("/api/internships")
-      .then(res => res.json())
-      .then(data => setInternships(data.jobs));
-  }, [session]);
+    if (!formData.skills.includes(customSkill)) {
+      setFormData({
+        ...formData,
+        skills: [...formData.skills, customSkill],
+      });
+    }
 
-  // 🚀 MAIN FUNCTION (FIXED)
-  const handleAnalyze = async () => {
-    if (!userProfile) return alert("Profile loading...");
-    if (!selectedJobId) return alert("Select a job first");
+    setCustomSkill("");
+  };
+
+  // 👉 NEXT
+  const handleNext = () => {
+    setError("");
+
+    if (step === 1 && !formData.role) return setError("Select role");
+    if (step === 2 && !formData.mode) return setError("Select work mode");
+    if (step === 3 && formData.skills.length === 0) return setError("Select skills");
+    if (step === 4 && !formData.education) return setError("Add education");
+    if (step === 5 && !formData.experience) return setError("Add experience");
+
+    setStep(step + 1);
+  };
+
+  // 👉 SUBMIT
+  const handleSubmit = async () => {
+    if (!formData.resumeText.trim()) {
+      return setError("Paste your resume");
+    }
 
     setLoading(true);
 
-    try {
-      const job = internships.find(j => j._id === selectedJobId);
-      if (!job) return;
+    const res = await fetch("/api/onboarding", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        role: formData.role,
+        mode: formData.mode,
+        skills: formData.skills,
+        education: formData.education,
+        experience: formData.experience,
+        resumeText: formData.resumeText
+      }),
+    });
 
-      const userSkills = (userProfile.skills || []).map(s => s.toLowerCase());
-      const required = job.skillsRequired || [];
-
-      const missing = required.filter(
-        s => !userSkills.includes(s.toLowerCase())
-      );
-
-      // ✅ MATCH %
-      const matchPercent = Math.round(
-        ((required.length - missing.length) / required.length) * 100
-      );
-
-      setMissingSkills(missing);
-      setMatch(matchPercent);
-
-      // 🚀 AUTO ROADMAP
-      const roadmapResult: RoadmapItem[] = [];
-
-      for (let skill of missing) {
-        const res = await fetch("/api/ai/roadmap", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ skill }),
-        });
-
-        const data = await res.json();
-
-        roadmapResult.push({
-          skill,
-          steps: data.roadmap
-            .split("\n")
-            .map((s: string) => s.trim())
-            .filter((s: string) => s),
-        });
-      }
-
-      setRoadmap(roadmapResult);
-
-    } catch (err) {
-      console.error(err);
-      alert("Analysis failed");
-    } finally {
-      setLoading(false);
+    if (res.ok) {
+      await update({ isOnboarded: true });
+      router.push("/internships");
+    } else {
+      setError("Failed to save");
     }
+
+    setLoading(false);
   };
 
-  if (status === "loading") {
-    return <p className="text-white text-center mt-20">Loading...</p>;
-  }
-
-  if (!session) return null;
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-purple-950 to-pink-950 text-white">
-      <Navbar />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-[#180a2b] to-[#3a0852] text-white p-6">
 
-      <main className="max-w-6xl mx-auto px-6 py-12 pt-24">
+      <div className="w-full max-w-2xl bg-white/5 border border-white/10 backdrop-blur-xl p-8 rounded-3xl shadow-2xl">
 
-        {/* HEADER */}
-        <h1 className="text-5xl font-extrabold mb-2">
-          Welcome back, {session.user?.name?.split(" ")[0]}
+        <h1 className="text-3xl font-bold mb-6 text-center">
+          Complete Your Profile
         </h1>
 
-        <p className="text-gray-300 mb-10">
-          Analyze your skills and generate smart roadmaps.
-        </p>
+        {error && (
+          <p className="text-red-400 text-center mb-4">{error}</p>
+        )}
 
-        {/* TOP CARDS */}
-        <div className="grid md:grid-cols-4 gap-6 mb-12">
-          {[Brain, Map, FileText, PenTool].map((Icon, i) => (
-            <div key={i} className="p-6 bg-white/5 rounded-xl">
-              <Icon className="text-pink-400" />
-            </div>
-          ))}
-        </div>
+        <AnimatePresence mode="wait">
 
-        {/* MAIN GRID */}
-        <div className="grid lg:grid-cols-2 gap-8">
-
-          {/* SKILL GAP */}
-          <div className="bg-white/5 p-6 rounded-xl">
-            <h2 className="flex gap-2 mb-4">
-              <Brain /> Skill Gap
-            </h2>
-
-            <select
-              value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="w-full p-2 mb-4 bg-black/50"
-            >
-              <option value="">Select job</option>
-              {internships.map(j => (
-                <option key={j._id} value={j._id}>
-                  {j.title} @ {j.company}
-                </option>
+          {/* STEP 1 */}
+          {step === 1 && (
+            <motion.div key="1">
+              <h2>Select Role</h2>
+              {ROLES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setFormData({ ...formData, role: r })}
+                  className={`w-full p-3 mt-2 rounded-xl ${
+                    formData.role === r ? "bg-purple-500" : "bg-white/10"
+                  }`}
+                >
+                  {r}
+                </button>
               ))}
-            </select>
+            </motion.div>
+          )}
 
-            <button
-              onClick={handleAnalyze}
-              className="bg-purple-600 px-4 py-2 rounded"
-            >
-              {loading ? "Analyzing..." : "Analyze"}
-            </button>
+          {/* STEP 2 */}
+          {step === 2 && (
+            <motion.div key="2">
+              <h2>Work Mode</h2>
+              {["Remote", "Hybrid", "Onsite"].map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setFormData({ ...formData, mode: r })}
+                  className={`w-full p-3 mt-2 rounded-xl ${
+                    formData.mode === r ? "bg-purple-500" : "bg-white/10"
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </motion.div>
+          )}
 
-            {/* RESULT */}
-            {missingSkills.length > 0 && (
-              <div className="mt-4">
+          {/* STEP 3 */}
+          {step === 3 && (
+            <motion.div key="3">
+              <input
+                placeholder="Search skills..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full p-3 mb-3 bg-black/40 rounded"
+              />
 
-                <p className="text-green-400 font-bold">
-                  Match: {match}%
-                </p>
-
-                <p className="mt-2 text-red-400">Missing Skills:</p>
-
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {missingSkills.map(s => (
-                    <span key={s} className="bg-pink-500/20 px-3 py-1 rounded">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-
+              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                {ALL_SKILLS.filter((s) =>
+                  s.toLowerCase().includes(search.toLowerCase())
+                ).map((skill) => (
+                  <button
+                    key={skill}
+                    onClick={() => toggleSkill(skill)}
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      formData.skills.includes(skill)
+                        ? "bg-purple-500"
+                        : "bg-white/10"
+                    }`}
+                  >
+                    {skill}
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
 
-          {/* ROADMAP */}
-          <div className="bg-white/5 p-6 rounded-xl">
-            <h2 className="flex gap-2 mb-4">
-              <Map /> Roadmap
-            </h2>
+              <div className="mt-3 flex gap-2">
+                <input
+                  placeholder="Custom skill"
+                  value={customSkill}
+                  onChange={(e) => setCustomSkill(e.target.value)}
+                  className="flex-1 p-2 bg-black/40 rounded"
+                />
+                <button onClick={addCustomSkill} className="bg-purple-500 px-3">
+                  Add
+                </button>
+              </div>
+            </motion.div>
+          )}
 
-            {roadmap.length === 0 ? (
-              <p>No roadmap yet</p>
-            ) : (
-              roadmap.map((r, i) => (
-                <div key={i} className="mb-4">
-                  <h3 className="text-cyan-300">{r.skill}</h3>
+          {/* STEP 4 */}
+          {step === 4 && (
+            <motion.div key="4">
+              <h2>Education</h2>
+              <textarea
+                rows={4}
+                placeholder="Enter your education details"
+                className="w-full p-3 bg-black/40 rounded"
+                onChange={(e) =>
+                  setFormData({ ...formData, education: e.target.value })
+                }
+              />
+            </motion.div>
+          )}
 
-                  <ul>
-                    {r.steps.map((step, j) => (
-                      <li key={j} className="flex gap-2">
-                        <ChevronRight /> {step}
-                      </li>
-                    ))}
-                  </ul>
+          {/* STEP 5 */}
+          {step === 5 && (
+            <motion.div key="5">
+              <h2>Experience</h2>
+              <textarea
+                rows={4}
+                placeholder="Enter your experience"
+                className="w-full p-3 bg-black/40 rounded"
+                onChange={(e) =>
+                  setFormData({ ...formData, experience: e.target.value })
+                }
+              />
+            </motion.div>
+          )}
 
-                </div>
-              ))
-            )}
-          </div>
+          {/* STEP 6 */}
+          {step === 6 && (
+            <motion.div key="6">
+              <h2>Paste Resume</h2>
+              <textarea
+                rows={6}
+                placeholder="Paste your resume here..."
+                className="w-full p-3 bg-black/40 rounded"
+                onChange={(e) =>
+                  setFormData({ ...formData, resumeText: e.target.value })
+                }
+              />
+            </motion.div>
+          )}
 
+        </AnimatePresence>
+
+        {/* BUTTONS */}
+        <div className="mt-6 flex justify-between">
+          {step > 1 && (
+            <button
+              onClick={() => setStep(step - 1)}
+              className="px-4 py-2 bg-white/10 rounded"
+            >
+              Back
+            </button>
+          )}
+
+          {step < 6 ? (
+            <button
+              onClick={handleNext}
+              className="px-6 py-2 bg-purple-600 rounded"
+            >
+              Next
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              className="px-6 py-2 bg-pink-600 rounded"
+            >
+              {loading ? "Saving..." : "Finish"}
+            </button>
+          )}
         </div>
 
-      </main>
-
-      <FloatingChatbot />
+      </div>
     </div>
   );
 }

@@ -11,18 +11,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    const formData = await req.formData();
+    // ✅ NOW USING JSON (not formData)
+    const body = await req.json();
 
-    // ✅ EXISTING FIELDS (no UI change)
-    const role = formData.get("role")?.toString() || "";
-    const jobType = formData.get("jobType")?.toString() || "";
-    const mode = formData.get("mode")?.toString() || "";
-    const skills = formData.get("skills")?.toString() || "";
+    const role = body.role || "";
+    const jobType = body.jobType || "";
+    const mode = body.mode || "";
 
-    // ✅ NEW OPTIONAL FIELDS (safe if not present in UI)
-    const experience = formData.get("experience")?.toString() || "";
-    const education = formData.get("education")?.toString() || "";
-    
+    // skills comes as array now
+    const skills = Array.isArray(body.skills) ? body.skills : [];
+
+    const experience = body.experience || "";
+    const education = body.education || "";
+    const resumeText = body.resumeText || "";
 
     const client = await clientPromise;
     const db = client.db();
@@ -35,22 +36,19 @@ export async function POST(req: Request) {
           jobType,
           mode,
 
-          // ✅ clean skills array
-          skills: skills
-            ? skills.split(",").map((s) => s.trim()).filter(Boolean)
-            : [],
+          // ✅ directly store array
+          skills,
 
-          // ✅ NEW fields (used by AI later)
+          // ✅ new fields
           experience,
           education,
+          resumeText,
 
-          // ✅ onboarding flag
           isOnboarded: true,
-
           updatedAt: new Date(),
         },
       },
-      { upsert: true } // 🔥 ensures user always exists
+      { upsert: true }
     );
 
     return NextResponse.json({ success: true });
