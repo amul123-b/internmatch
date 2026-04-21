@@ -37,7 +37,6 @@ export default function DashboardPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedJobId, setSelectedJobId] = useState("");
 
-  // NEW STATES (IMPORTANT)
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -47,7 +46,7 @@ export default function DashboardPage() {
     if (!session) router.push("/login");
   }, [session, status, router]);
 
-  // FETCH
+  // FETCH DATA
   useEffect(() => {
     if (!session) return;
 
@@ -64,7 +63,7 @@ export default function DashboardPage() {
     fetchData();
   }, [session]);
 
-  // 🔥 REAL ANALYZE
+  // 🔥 ANALYZE (ROADMAP)
   const handleAnalyze = async () => {
     if (!selectedJobId) return alert("Select a job first 😭");
 
@@ -88,14 +87,14 @@ export default function DashboardPage() {
       setResult(data);
       alert("Analysis Done ✅");
 
-    } catch (err) {
+    } catch {
       alert("Analysis failed ❌");
     } finally {
       setLoading(false);
     }
   };
 
-  // 🔥 REAL RESUME
+  // 🔥 RESUME
   const handleResume = async () => {
     if (!userProfile) return;
 
@@ -125,7 +124,7 @@ export default function DashboardPage() {
     }
   };
 
-  // 🔥 REAL COVER LETTER
+  // 🔥 COVER LETTER
   const handleCoverLetter = async () => {
     if (!userProfile) return;
 
@@ -176,6 +175,7 @@ export default function DashboardPage() {
 
       <main className="max-w-6xl mx-auto px-6 py-16 pt-28">
 
+        {/* HEADER */}
         <div className="mb-12">
           <h1 className="text-5xl font-extrabold bg-gradient-to-r from-purple-300 via-pink-400 to-purple-500 text-transparent bg-clip-text">
             Welcome back, {session.user?.name?.split(" ")[0]} ✨
@@ -186,11 +186,12 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        {/* JOB SELECT */}
         <div className="mb-10">
           <select
             value={selectedJobId}
             onChange={(e) => setSelectedJobId(e.target.value)}
-            className="bg-black/60 border border-purple-500 px-5 py-3 rounded-xl backdrop-blur-md"
+            className="bg-black/60 border border-purple-500 px-5 py-3 rounded-xl backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-purple-500 hover:shadow-[0_0_20px_#a855f7]"
           >
             <option value="">Select Internship 💼</option>
             {internships.map((job) => (
@@ -201,6 +202,29 @@ export default function DashboardPage() {
           </select>
         </div>
 
+        {/* APPLICATIONS */}
+        <div className="bg-white/5 backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-lg mb-12">
+          <h2 className="text-xl font-bold mb-4 text-purple-300">
+            My Applications
+          </h2>
+
+          {applications.length === 0 ? (
+            <p className="text-gray-400">No applications yet</p>
+          ) : (
+            applications.map((app, i) => (
+              <div
+                key={i}
+                className="mb-4 p-4 rounded-xl bg-gradient-to-r from-purple-900/40 to-black/40 border border-purple-500/20 hover:shadow-[0_0_25px_#9333ea] transition"
+              >
+                <p className="font-bold text-white">{app.jobTitle}</p>
+                <p className="text-sm text-gray-400">{app.company}</p>
+                <p className="text-green-400 text-sm">{app.status}</p>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* FEATURES */}
         <div className="grid md:grid-cols-4 gap-8">
           {features.map((f, i) => {
             const Icon = f.icon;
@@ -221,16 +245,67 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {/* RESULT DISPLAY */}
-        {result && (
-          <div className="mt-10 bg-black/40 p-6 rounded-xl border border-purple-500">
-            <pre className="whitespace-pre-wrap text-sm">
-              {typeof result === "string"
-                ? result
-                : JSON.stringify(result, null, 2)}
-            </pre>
-          </div>
-        )}
+        {/* 🔥 RESULT UI */}
+{result && (
+  <div className="mt-12">
+
+    {/* 🎯 ROADMAP */}
+    {result.roadmap ? (
+      <div>
+        <h2 className="text-2xl font-bold mb-6 text-purple-300">
+          Your Skill Roadmap 🚀
+        </h2>
+
+        <div className="space-y-6">
+          {result.roadmap.map((item: any, index: number) => (
+            <div
+              key={index}
+              className="p-5 rounded-2xl bg-gradient-to-r from-purple-900/40 to-black/40 
+              border border-purple-500/20 backdrop-blur-xl 
+              hover:shadow-[0_0_30px_#a855f7] transition"
+            >
+              <div className="flex items-center gap-4 mb-2">
+                <div className="w-10 h-10 flex items-center justify-center rounded-full 
+                bg-purple-600 text-white font-bold shadow-lg">
+                  {item.step}
+                </div>
+
+                <h3 className="text-lg font-semibold text-purple-200">
+                  {item.title}
+                </h3>
+              </div>
+
+              <p className="text-gray-300 ml-14">
+                {item.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null}
+
+    {/* 📄 RESUME */}
+    {typeof result === "string" && result.includes("SKILLS") && (
+      <div className="bg-black/40 p-6 rounded-xl border border-purple-500">
+        <h2 className="text-xl mb-4 text-purple-300">Your Resume 📄</h2>
+        <pre className="whitespace-pre-wrap text-sm text-gray-200">
+          {result}
+        </pre>
+      </div>
+    )}
+
+    {/* 💌 COVER LETTER */}
+    {typeof result === "string" && result.includes("Dear") && (
+      <div className="bg-black/40 p-6 rounded-xl border border-purple-500">
+        <h2 className="text-xl mb-4 text-purple-300">Cover Letter 💌</h2>
+        <pre className="whitespace-pre-wrap text-sm text-gray-200">
+          {result}
+        </pre>
+      </div>
+    )}
+
+  </div>
+)}
 
       </main>
 
